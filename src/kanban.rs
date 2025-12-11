@@ -1,12 +1,12 @@
+use std::fs;
+
 use crate::{
     constants::{
-        DELETE_TASK_KEY, DOING_LIST_KEY, DONE_LIST_KEY, MOVE_TASK_TO_DOING_LIST_KEY,
-        MOVE_TASK_TO_DONE_LIST_KEY, MOVE_TASK_TO_TODO_LIST_KEY, TODO_LIST_KEY,
+        CHANGE_INPUT_MODE, DELETE_TASK, DOING_LIST, DONE_LIST, EXIT, MOVE_DOWN, MOVE_TO_DOING,
+        MOVE_TO_DONE, MOVE_TO_TODO, MOVE_UP, TODO_LIST,
     },
     helpers::popup_area,
-    widgets::footer::Footer,
-    widgets::input_box::InputBox,
-    widgets::kanban_list::KanbanList,
+    widgets::{footer::Footer, input_box::InputBox, kanban_list::KanbanList},
 };
 use color_eyre::Result;
 use ratatui::{
@@ -14,6 +14,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     layout::{Constraint, Layout, Position},
 };
+use serde_json::Value;
 
 pub struct Kanban {
     /// Flag to gracefully shutdown
@@ -65,6 +66,9 @@ impl Default for Kanban {
 
 impl Kanban {
     pub fn new() -> Self {
+        let data = fs::read_to_string("kanban.json").expect("No hay una configuracion previa?!?!");
+        let kanban_lists: Value = serde_json::from_str(&data).unwrap();
+        // TODO: Cargarle a las KanbanLists los valores que estaban persistidos
         Kanban {
             should_exit: false,
             todo_list: KanbanList::new(String::from("TODO")),
@@ -104,18 +108,22 @@ impl Kanban {
         frame.render_widget(&mut self.done_list, done_area);
 
         if self.input_mode == InputMode::Editing {
-            let input_area = popup_area(main_area, 60, 20);
-            frame.render_widget(&mut self.input_box, input_area);
-
-            // TODO: Intentar delegar el renderizado del cursor al input box
-            frame.set_cursor_position(Position::new(
-                // Draw the cursor at the current position in the input field.
-                // This position is can be controlled via the left and right arrow key
-                input_area.x + self.input_box.get_char_index() as u16 + 1,
-                // Move one line down, from the border to the input line
-                input_area.y + 1,
-            ));
+            self.render_input_widget(frame, main_area);
         }
+    }
+
+    fn render_input_widget(&mut self, frame: &mut Frame<'_>, main_area: ratatui::prelude::Rect) {
+        let input_area = popup_area(main_area, 60, 20);
+        frame.render_widget(&mut self.input_box, input_area);
+
+        // TODO: Intentar delegar el renderizado del cursor al input box
+        frame.set_cursor_position(Position::new(
+            // Draw the cursor at the current position in the input field.
+            // This position is can be controlled via the left and right arrow key
+            input_area.x + self.input_box.get_char_index() as u16 + 1,
+            // Move one line down, from the border to the input line
+            input_area.y + 1,
+        ));
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
@@ -131,17 +139,18 @@ impl Kanban {
 
     fn normal_mode_input(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.should_exit = true,
-            KeyCode::Char('j') | KeyCode::Down => self.select_next(),
-            KeyCode::Char('k') | KeyCode::Up => self.select_previous(),
-            KeyCode::Char('p') => self.change_input_mode(),
-            KeyCode::Char(TODO_LIST_KEY) => self.focus_todo(),
-            KeyCode::Char(DOING_LIST_KEY) => self.focus_doing(),
-            KeyCode::Char(DONE_LIST_KEY) => self.focus_done(),
-            KeyCode::Char(MOVE_TASK_TO_TODO_LIST_KEY) => self.move_item_to_todo(),
-            KeyCode::Char(MOVE_TASK_TO_DOING_LIST_KEY) => self.move_item_to_doing(),
-            KeyCode::Char(MOVE_TASK_TO_DONE_LIST_KEY) => self.move_item_to_done(),
-            KeyCode::Char(DELETE_TASK_KEY) => self.delete_item(),
+            KeyCode::Char(EXIT) | KeyCode::Esc => self.should_exit = true, // TODO: Persistir los
+            // cambios
+            KeyCode::Char(MOVE_DOWN) | KeyCode::Down => self.current_list().select_next(),
+            KeyCode::Char(MOVE_UP) | KeyCode::Up => self.current_list().select_previous(),
+            KeyCode::Char(CHANGE_INPUT_MODE) => self.change_input_mode(),
+            KeyCode::Char(TODO_LIST) => self.change_focus(SelectedList::Todo),
+            KeyCode::Char(DOING_LIST) => self.change_focus(SelectedList::Doing),
+            KeyCode::Char(DONE_LIST) => self.change_focus(SelectedList::Done),
+            KeyCode::Char(MOVE_TO_TODO) => self.move_item(SelectedList::Todo),
+            KeyCode::Char(MOVE_TO_DOING) => self.move_item(SelectedList::Doing),
+            KeyCode::Char(MOVE_TO_DONE) => self.move_item(SelectedList::Done),
+            KeyCode::Char(DELETE_TASK) => self.delete_item(),
             _ => {}
         }
     }
@@ -167,52 +176,24 @@ impl Kanban {
         }
     }
 
-    fn focus_todo(&mut self) {
-        self.change_focus_to(SelectedList::Todo);
-    }
-
-    fn focus_doing(&mut self) {
-        self.change_focus_to(SelectedList::Doing);
-    }
-
-    fn focus_done(&mut self) {
-        self.change_focus_to(SelectedList::Done);
-    }
-
-    fn change_focus_to(&mut self, new_focus: SelectedList) {
+    fn change_focus(&mut self, new_focus: SelectedList) {
         self.current_list().clear_select();
         self.selected_list = new_focus;
         self.current_list().select_next();
     }
 
-    fn move_item_to_todo(&mut self) {
-        self.move_item_to(SelectedList::Todo)
-    }
-
-    fn move_item_to_doing(&mut self) {
-        self.move_item_to(SelectedList::Doing)
-    }
-
-    fn move_item_to_done(&mut self) {
-        self.move_item_to(SelectedList::Done)
-    }
-
-    fn move_item_to(&mut self, destination_list: SelectedList) {
+    fn move_item(&mut self, destination_list: SelectedList) {
         if self.selected_list == destination_list {
             return;
         }
 
         if let Some(i) = self.current_list().selected() {
             let item = self.current_list().remove(i);
-            self.move_item_to_list(destination_list, item);
-        }
-    }
-
-    fn move_item_to_list(&mut self, destination_list: SelectedList, item: String) {
-        match destination_list {
-            SelectedList::Todo => self.todo_list.push(item),
-            SelectedList::Doing => self.doing_list.push(item),
-            SelectedList::Done => self.done_list.push(item),
+            match destination_list {
+                SelectedList::Todo => self.todo_list.push(item),
+                SelectedList::Doing => self.doing_list.push(item),
+                SelectedList::Done => self.done_list.push(item),
+            }
         }
     }
 
@@ -220,14 +201,6 @@ impl Kanban {
         if let Some(i) = self.current_list().selected() {
             self.current_list().remove(i);
         }
-    }
-
-    fn select_next(&mut self) {
-        self.current_list().select_next();
-    }
-
-    fn select_previous(&mut self) {
-        self.current_list().select_previous();
     }
 
     fn change_input_mode(&mut self) {
