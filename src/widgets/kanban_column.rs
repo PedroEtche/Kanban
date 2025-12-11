@@ -7,20 +7,28 @@ use ratatui::{
     widgets::{Block, HighlightSpacing, List, ListItem, ListState, StatefulWidget},
 };
 
-#[derive(Clone)]
-pub struct KanbanList {
+#[derive(Debug, Clone)]
+pub struct KanbanColumn {
     items: Vec<String>,
     state: ListState,
     title: String,
 }
 
-impl KanbanList {
+impl KanbanColumn {
     pub fn new(title: String) -> Self {
-        KanbanList {
+        KanbanColumn {
             items: Vec::new(),
             state: ListState::default(),
             title,
         }
+    }
+
+    pub fn load(&mut self, items: Vec<String>) {
+        self.items = items
+    }
+
+    pub fn to_json(&self) -> Vec<String> {
+        self.items.clone()
     }
 
     pub fn selected(&self) -> Option<usize> {
@@ -70,19 +78,7 @@ impl KanbanList {
     }
 }
 
-impl FromIterator<&'static str> for KanbanList {
-    fn from_iter<I: IntoIterator<Item = &'static str>>(iter: I) -> Self {
-        let items = iter.into_iter().map(String::from).collect();
-        let state = ListState::default();
-        Self {
-            items,
-            state,
-            title: String::from("Prueba"),
-        }
-    }
-}
-
-impl Widget for &mut KanbanList {
+impl Widget for &mut KanbanColumn {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.render(area, buf);
     }

@@ -1,5 +1,13 @@
 {
-	"todo": [],
-	"doing": [],
-	"done": [],
+  "doing": [
+    "Bañarme"
+  ],
+  "done": [
+    "Agregar persistencia al Kanban"
+  ],
+  "todo": [
+    "Sacar a Emma",
+    "Ir a capital",
+    "Comprar Muffins Proteicos"
+  ]
 }

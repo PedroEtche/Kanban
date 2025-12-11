@@ -12,6 +12,12 @@ pub struct InputBox {
     character_index: usize,
 }
 
+impl Default for InputBox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InputBox {
     pub fn new() -> Self {
         InputBox {

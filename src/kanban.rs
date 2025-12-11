@@ -1,12 +1,11 @@
-use std::fs;
-
 use crate::{
     constants::{
         CHANGE_INPUT_MODE, DELETE_TASK, DOING_LIST, DONE_LIST, EXIT, MOVE_DOWN, MOVE_TO_DOING,
         MOVE_TO_DONE, MOVE_TO_TODO, MOVE_UP, TODO_LIST,
     },
     helpers::popup_area,
-    widgets::{footer::Footer, input_box::InputBox, kanban_list::KanbanList},
+    persistence::Persistence,
+    widgets::{footer::Footer, input_box::InputBox, kanban_column::KanbanColumn},
 };
 use color_eyre::Result;
 use ratatui::{
@@ -14,15 +13,14 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     layout::{Constraint, Layout, Position},
 };
-use serde_json::Value;
 
 pub struct Kanban {
     /// Flag to gracefully shutdown
     should_exit: bool,
     /// Kanban List to render
-    todo_list: KanbanList,
-    doing_list: KanbanList,
-    done_list: KanbanList,
+    todo_list: KanbanColumn,
+    doing_list: KanbanColumn,
+    done_list: KanbanColumn,
     selected_list: SelectedList,
     input_mode: InputMode,
     input_box: InputBox,
@@ -41,43 +39,18 @@ pub enum SelectedList {
     Done,
 }
 
-impl Default for Kanban {
-    fn default() -> Self {
-        let list = KanbanList::from_iter([
-            "Rewrite everything with Rust!",
-            "Rewrite all of your tui apps with Ratatui",
-            "Pet your cat",
-            "Walk with your dog",
-            "Pay the bills",
-            "Refactor list example",
-        ]);
-
-        Self {
-            should_exit: false,
-            todo_list: list.clone(),
-            doing_list: list.clone(),
-            done_list: list,
-            selected_list: SelectedList::Todo,
-            input_mode: InputMode::Normal,
-            input_box: InputBox::new(),
-        }
-    }
-}
-
 impl Kanban {
-    pub fn new() -> Self {
-        let data = fs::read_to_string("kanban.json").expect("No hay una configuracion previa?!?!");
-        let kanban_lists: Value = serde_json::from_str(&data).unwrap();
-        // TODO: Cargarle a las KanbanLists los valores que estaban persistidos
-        Kanban {
+    pub fn new() -> Result<Self> {
+        let (todo_list, doing_list, done_list) = Persistence::load()?;
+        Ok(Kanban {
             should_exit: false,
-            todo_list: KanbanList::new(String::from("TODO")),
-            doing_list: KanbanList::new(String::from("Doing")),
-            done_list: KanbanList::new(String::from("Done")),
+            todo_list,
+            doing_list,
+            done_list,
             selected_list: SelectedList::Todo,
             input_mode: InputMode::Normal,
-            input_box: InputBox::new(),
-        }
+            input_box: InputBox::default(),
+        })
     }
 
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
@@ -139,7 +112,7 @@ impl Kanban {
 
     fn normal_mode_input(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char(EXIT) | KeyCode::Esc => self.should_exit = true, // TODO: Persistir los
+            KeyCode::Char(EXIT) | KeyCode::Esc => self.handle_exit(), // TODO: Persistir los
             // cambios
             KeyCode::Char(MOVE_DOWN) | KeyCode::Down => self.current_list().select_next(),
             KeyCode::Char(MOVE_UP) | KeyCode::Up => self.current_list().select_previous(),
@@ -155,6 +128,11 @@ impl Kanban {
         }
     }
 
+    fn handle_exit(&mut self) {
+        Persistence::persist(&self.todo_list, &self.doing_list, &self.done_list);
+        self.should_exit = true;
+    }
+
     fn editing_mode_input(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Enter => self.submit_message(),
@@ -168,7 +146,7 @@ impl Kanban {
     }
 
     // Helper to get the currently active list
-    fn current_list(&mut self) -> &mut KanbanList {
+    fn current_list(&mut self) -> &mut KanbanColumn {
         match self.selected_list {
             SelectedList::Todo => &mut self.todo_list,
             SelectedList::Doing => &mut self.doing_list,
