@@ -1,10 +1,7 @@
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{
-    fs::{self, File},
-    io::Write,
-};
+use std::fs::{self, File};
 
 use crate::widgets::kanban_column::KanbanColumn;
 
@@ -32,6 +29,7 @@ impl Persistence {
     }
 
     pub fn persist(todo_list: &KanbanColumn, doing_list: &KanbanColumn, done_list: &KanbanColumn) {
+        // TODO: Mejorar la persistencia del json
         let john = json!({
             "todo": todo_list.to_json(),
             "doing": doing_list.to_json(),
