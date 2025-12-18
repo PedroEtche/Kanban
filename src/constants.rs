@@ -9,3 +9,4 @@ pub const MOVE_UP: char = 'k';
 pub const MOVE_DOWN: char = 'j';
 pub const CHANGE_INPUT_MODE: char = 'p';
 pub const EXIT: char = 'q';
+pub const HIGHLIGHT_SIMBOL: &str = "> ";

@@ -2,7 +2,7 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::Color,
-    widgets::{Block, Clear, Paragraph, Widget},
+    widgets::{Block, Clear, Paragraph, Widget, Wrap},
 };
 
 pub struct InputBox {
@@ -34,6 +34,7 @@ impl InputBox {
     pub fn move_cursor_right(&mut self) {
         let cursor_moved_right = self.character_index.saturating_add(1);
         self.character_index = self.clamp_cursor(cursor_moved_right);
+        // TODO: Hay que mover el cursor para la siguiente linea si la tarea es muy larga
     }
 
     pub fn enter_char(&mut self, new_char: char) {
@@ -102,6 +103,7 @@ impl InputBox {
 impl Widget for &mut InputBox {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let input = Paragraph::new(self.input.as_str())
+            .wrap(Wrap { trim: true }) // TODO: Estudiar bien que hace esta linea
             .style(Color::Red)
             .block(Block::bordered().title("Input"));
 

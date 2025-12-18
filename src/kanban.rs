@@ -14,6 +14,7 @@ use ratatui::{
     layout::{Constraint, Layout, Position},
 };
 
+/// Kanban app main struct. Used to manage user input (editing columns) and app renderization.
 pub struct Kanban {
     /// Flag to gracefully shutdown
     should_exit: bool,
@@ -21,19 +22,21 @@ pub struct Kanban {
     todo_list: KanbanColumn,
     doing_list: KanbanColumn,
     done_list: KanbanColumn,
-    selected_list: SelectedList,
+    selected_column: SelectedColumn,
     input_mode: InputMode,
     input_box: InputBox,
 }
 
+/// Indicates the mode the user is in. Editing for adding task, Normal to move them.
 #[derive(Debug, PartialEq)]
 enum InputMode {
     Normal,
     Editing,
 }
 
+/// Helper enum used inside the Kanban logic. Helps with the selection/editing of columns
 #[derive(Debug, PartialEq)]
-pub enum SelectedList {
+pub enum SelectedColumn {
     Todo,
     Doing,
     Done,
@@ -47,12 +50,13 @@ impl Kanban {
             todo_list,
             doing_list,
             done_list,
-            selected_list: SelectedList::Todo,
+            selected_column: SelectedColumn::Todo,
             input_mode: InputMode::Normal,
             input_box: InputBox::default(),
         })
     }
 
+    /// Main ratatui loop. Draw, ask for input and repeat.
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         while !self.should_exit {
             terminal.draw(|frame| self.render(frame))?;
@@ -63,6 +67,7 @@ impl Kanban {
         Ok(())
     }
 
+    /// Private method used to assing every Widget their available screen and tell them to render.
     fn render(&mut self, frame: &mut Frame) {
         let layout = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]);
         let [main_area, footer_area] = layout.areas(frame.area());
@@ -85,6 +90,8 @@ impl Kanban {
         }
     }
 
+    /// Private method. Main used is to render the cursor for aesthetics and tell the InputBox
+    /// widget to render
     fn render_input_widget(&mut self, frame: &mut Frame<'_>, main_area: ratatui::prelude::Rect) {
         let input_area = popup_area(main_area, 60, 20);
         frame.render_widget(&mut self.input_box, input_area);
@@ -114,15 +121,15 @@ impl Kanban {
         match key.code {
             KeyCode::Char(EXIT) | KeyCode::Esc => self.handle_exit(), // TODO: Persistir los
             // cambios
-            KeyCode::Char(MOVE_DOWN) | KeyCode::Down => self.current_list().select_next(),
-            KeyCode::Char(MOVE_UP) | KeyCode::Up => self.current_list().select_previous(),
+            KeyCode::Char(MOVE_DOWN) | KeyCode::Down => self.current_column().select_next(),
+            KeyCode::Char(MOVE_UP) | KeyCode::Up => self.current_column().select_previous(),
             KeyCode::Char(CHANGE_INPUT_MODE) => self.change_input_mode(),
-            KeyCode::Char(TODO_LIST) => self.change_focus(SelectedList::Todo),
-            KeyCode::Char(DOING_LIST) => self.change_focus(SelectedList::Doing),
-            KeyCode::Char(DONE_LIST) => self.change_focus(SelectedList::Done),
-            KeyCode::Char(MOVE_TO_TODO) => self.move_item(SelectedList::Todo),
-            KeyCode::Char(MOVE_TO_DOING) => self.move_item(SelectedList::Doing),
-            KeyCode::Char(MOVE_TO_DONE) => self.move_item(SelectedList::Done),
+            KeyCode::Char(TODO_LIST) => self.change_focus(SelectedColumn::Todo),
+            KeyCode::Char(DOING_LIST) => self.change_focus(SelectedColumn::Doing),
+            KeyCode::Char(DONE_LIST) => self.change_focus(SelectedColumn::Done),
+            KeyCode::Char(MOVE_TO_TODO) => self.move_item(SelectedColumn::Todo),
+            KeyCode::Char(MOVE_TO_DOING) => self.move_item(SelectedColumn::Doing),
+            KeyCode::Char(MOVE_TO_DONE) => self.move_item(SelectedColumn::Done),
             KeyCode::Char(DELETE_TASK) => self.delete_item(),
             _ => {}
         }
@@ -135,7 +142,7 @@ impl Kanban {
 
     fn editing_mode_input(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Enter => self.submit_message(),
+            KeyCode::Enter => self.push_message(),
             KeyCode::Char(to_insert) => self.input_box.enter_char(to_insert),
             KeyCode::Backspace => self.input_box.delete_char(),
             KeyCode::Left => self.input_box.move_cursor_left(),
@@ -146,38 +153,40 @@ impl Kanban {
     }
 
     // Helper to get the currently active list
-    fn current_list(&mut self) -> &mut KanbanColumn {
-        match self.selected_list {
-            SelectedList::Todo => &mut self.todo_list,
-            SelectedList::Doing => &mut self.doing_list,
-            SelectedList::Done => &mut self.done_list,
+    fn current_column(&mut self) -> &mut KanbanColumn {
+        match self.selected_column {
+            SelectedColumn::Todo => &mut self.todo_list,
+            SelectedColumn::Doing => &mut self.doing_list,
+            SelectedColumn::Done => &mut self.done_list,
         }
     }
 
-    fn change_focus(&mut self, new_focus: SelectedList) {
-        self.current_list().clear_select();
-        self.selected_list = new_focus;
-        self.current_list().select_next();
+    /// Gives the focus to a new column
+    fn change_focus(&mut self, new_focus: SelectedColumn) {
+        self.current_column().clear_select();
+        self.selected_column = new_focus;
+        self.current_column().select_next();
     }
 
-    fn move_item(&mut self, destination_list: SelectedList) {
-        if self.selected_list == destination_list {
+    /// Change the selected taks from the focus column to another one
+    fn move_item(&mut self, destination_list: SelectedColumn) {
+        if self.selected_column == destination_list {
             return;
         }
 
-        if let Some(i) = self.current_list().selected() {
-            let item = self.current_list().remove(i);
+        if let Some(i) = self.current_column().selected() {
+            let item = self.current_column().remove(i);
             match destination_list {
-                SelectedList::Todo => self.todo_list.push(item),
-                SelectedList::Doing => self.doing_list.push(item),
-                SelectedList::Done => self.done_list.push(item),
+                SelectedColumn::Todo => self.todo_list.push(item),
+                SelectedColumn::Doing => self.doing_list.push(item),
+                SelectedColumn::Done => self.done_list.push(item),
             }
         }
     }
 
     fn delete_item(&mut self) {
-        if let Some(i) = self.current_list().selected() {
-            self.current_list().remove(i);
+        if let Some(i) = self.current_column().selected() {
+            self.current_column().remove(i);
         }
     }
 
@@ -188,7 +197,8 @@ impl Kanban {
         }
     }
 
-    fn submit_message(&mut self) {
+    /// Push new task to the TODO column
+    fn push_message(&mut self) {
         if let Some(message) = self.input_box.submit_message() {
             self.todo_list.push(message);
         }
