@@ -5,6 +5,8 @@ use std::fs::{self, File};
 
 use crate::widgets::kanban_column::KanbanColumn;
 
+const PATH: &str = "/Users/pedro/Proyectos Personales/Kanban/kanban.json";
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Persistence {
     todo: Vec<String>,
@@ -14,7 +16,7 @@ pub struct Persistence {
 
 impl Persistence {
     pub fn load() -> Result<(KanbanColumn, KanbanColumn, KanbanColumn)> {
-        let data = fs::read_to_string("kanban.json")?;
+        let data = fs::read_to_string(PATH)?;
         let load_data: Persistence = serde_json::from_str(&data)?;
 
         let mut todo_list = KanbanColumn::new(String::from("TODO"));
@@ -36,7 +38,7 @@ impl Persistence {
             "done": done_list.to_json()
         });
 
-        let file = File::create("kanban.json").unwrap();
+        let file = File::create(PATH).unwrap();
         serde_json::to_writer_pretty(file, &john).unwrap();
     }
 }
